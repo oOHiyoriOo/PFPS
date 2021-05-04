@@ -14,3 +14,4 @@
 
 #### HF and remember: Stay Legal!
 
+> removed the proxys lists, because they often change and some of them aren't responding fast enough etc.
