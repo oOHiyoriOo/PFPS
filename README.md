@@ -1,5 +1,5 @@
 # PFPS
-## Pretty Slow Proxy Scraper
+## Pretty Fast Proxy Scraper
 - puts everything into 'SyncList.txt'
 - u can customize the resource usage (Thread count and Proxy count to get.)
 - gets 5k Proxys in the same time the old script gets ~ 270 Proxys.
