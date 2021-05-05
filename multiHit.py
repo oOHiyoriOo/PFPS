@@ -51,7 +51,7 @@ def GetProxy(ThreadNo,ProxyList,ProxyCount,MaxRequestFails):
 
         except Exception as err:
             fails = fails + 1
-            s_print(Fore.RED+"Thread["+str(ThreadNo)+"] Failed."+Fore.RESET)
+            s_print(spaces+Fore.RED+"Thread["+str(ThreadNo)+"] Failed."+Fore.RESET)
             LOGFILE = __dirname+"/logs/Thread["+str(ThreadNo)+"].log"
             MODE = 'a' if os.path.isfile(LOGFILE) else 'w'
             with open(LOGFILE,MODE,encoding='utf-8') as log:
@@ -61,7 +61,7 @@ def GetProxy(ThreadNo,ProxyList,ProxyCount,MaxRequestFails):
 
 
 if __name__ == '__main__':
-    Threads = 10
+    Threads = 40
     ProxyLoopCount = 10000
     MaxFails = 2
 
@@ -76,10 +76,16 @@ if __name__ == '__main__':
     for Task in TasksList:
         Task.join()
 
-    print("List: "+str(len(ProxyListShared))+"/"+str(ProxyLoopCount))
+
+    if str(platform.system() == "Linux"):
+        spaces = "\033[0H" + ("\n"*(Threads+1))
+    else:
+        spaces = ""
+
+    print(spaces+"List: "+str(len(ProxyListShared))+"/"+str(ProxyLoopCount))
     MODE = 'a' if os.path.isfile('SyncList.txt') else 'w'
     with open('SyncList.txt',MODE,encoding='utf-8') as FinalSync:
         for proxy in ProxyListShared:
             FinalSync.write(proxy+"\n")
 
-    print(Fore.RESET+"\n"*(Threads+1))
+    print(spaces+Fore.RESET+"\n"*(Threads+2))
