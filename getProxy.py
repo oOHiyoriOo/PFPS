@@ -1,19 +1,21 @@
 
 import threading
-
 import requests
 import os
-from colorama import Fore,init
 import platform
+
+from pydoc import locate
+from colorama import Fore,init
 
 init()
 
 __dirname = os.path.abspath(os.path.dirname(__file__))
-RDIR = ["logs"]
+RDIR = ["logs"] # rewuired directorys
 for DIR in RDIR:
     if not os.path.isdir(__dirname+'/'+DIR):
         os.mkdir(__dirname+'/'+DIR)
 
+# Fix print issue when using Threading
 s_print_lock = threading.Lock()
 def s_print(*a, **b):
     """Thread safe print function"""
@@ -37,6 +39,7 @@ def GetProxy(ThreadNo,ProxyList,ProxyCount,MaxRequestFails,PingCheck):
             if s.status_code == 200:
                 res = s.json()
                 
+                # ["Anonymous","Elite"] are the only proxy types usefull, the others are snitches.
                 if res['isAlive'] == True and res['proxyLevel'] in ["Anonymous","Elite"]: # just skip the proxy if it's considered 'dead', i dont value this as error.
                     proxy = str(res['host'])+":"+str(res['port'])
                     if ProxyList.count(proxy) == 0:
@@ -64,41 +67,63 @@ def GetProxy(ThreadNo,ProxyList,ProxyCount,MaxRequestFails,PingCheck):
 
     s_print(spaces+Fore.YELLOW+"Thread["+str(ThreadNo)+"] Finished Job."+(" "*20))
 
+
 def setup():
-    options = {'Threads':'int','Proxy Count':'int','Max Fails':int}
+    options = {'Threads':'int','Proxy Count':'int','Max Fails':'int','Ping Check':'bool'}
     settings = []
     
+    for e in options:
+        res = input(e+": ")
+        tmp = locate(options[e])
+        valid = False
+        while not valid:
+            try:
+                tmp(res)
+                settings.append(tmp(res))
+                valid = True
+            except:
+                valid = False
 
     return settings #Threads, ProxyLoopCount, MaxFails, PingCheck
 
 
 if __name__ == '__main__':
 
-
-    Threads, ProxyLoopCount, MaxFails, PingCheck = setup()
-
-
-    ProxyListShared = []
-    TasksList = []
-    
-    for i in range(Threads):
-        CT = threading.Thread(target=GetProxy, args=(i,ProxyListShared,int(round(ProxyLoopCount / Threads,0)),MaxFails,PingCheck,),daemon=True )
-        TasksList.append(CT)
-        CT.start()
-
-    for Task in TasksList:
-        Task.join()
+    try:
+        Threads, ProxyLoopCount, MaxFails, PingCheck = setup()
 
 
-    if str(platform.system() == "Linux"):
-        spaces = "\033[0H" + ("\n"*(Threads+1))
-    else:
-        spaces = ""
+        ProxyListShared = []
+        TasksList = []
+        
+        for i in range(Threads):
+            CT = threading.Thread(target=GetProxy, args=(i,ProxyListShared,int(round(ProxyLoopCount / Threads,0)),MaxFails,PingCheck,),daemon=True )
+            TasksList.append(CT)
+            CT.start()
 
-    print(spaces+"Result: "+str(len(ProxyListShared))+"/"+str(ProxyLoopCount)+" Proxys saved.")
-    MODE = 'a' if os.path.isfile('SyncList.txt') else 'w'
-    with open('SyncList.txt',MODE,encoding='utf-8') as FinalSync:
-        for proxy in ProxyListShared:
-            FinalSync.write(proxy+"\n")
+        for Task in TasksList:
+            Task.join()
 
-    print("\n"+spaces+Fore.RESET)
+
+        if str(platform.system() == "Linux"):
+            spaces = "\033[0H" + ("\n"*(Threads+1))
+        else:
+            spaces = ""
+
+        print(spaces+"Result: "+str(len(ProxyListShared))+"/"+str(ProxyLoopCount)+" Proxys saved.")
+        MODE = 'a' if os.path.isfile('SyncList.txt') else 'w'
+        with open('SyncList.txt',MODE,encoding='utf-8') as FinalSync:
+            for proxy in ProxyListShared:
+                FinalSync.write(proxy+"\n")
+
+        print("\n"+spaces+Fore.RESET)
+
+    except KeyboardInterrupt:
+        exit()
+        quit()
+        
+    except Exception as err:
+        LOGFILE = __dirname+"/logs/Main.log"
+        MODE = 'a' if os.path.isfile(LOGFILE) else 'w'
+        with open(LOGFILE,MODE,encoding='utf-8') as log:
+            log.write(str(err)+"\n")
