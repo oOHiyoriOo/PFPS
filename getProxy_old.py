@@ -18,7 +18,7 @@ try:
                 break
             if s.status_code == 200:
                 res = s.json()
-                MODE = 'a' if os.path.isfile(res['type']+"_"+res['proxyLevel']+'.txt') else 'w'
+                MODE = 'a' if os.path.isfile(__dirname+'/lists/'+str(res['type'])+"_"+str(res['proxyLevel'])+'.txt') else 'w'
 
                 with open(__dirname+'/lists/'+str(res['type'])+"_"+str(res['proxyLevel'])+'.txt',MODE,encoding='utf-8') as output:
                     output.write(str(res['host'])+":"+str(res['port'])+"\n")
