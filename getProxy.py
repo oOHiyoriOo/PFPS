@@ -1,70 +1,104 @@
+
+import threading
+
 import requests
 import os
-import sys
-import time
+from colorama import Fore,init
+import platform
+
+init()
 
 __dirname = os.path.abspath(os.path.dirname(__file__))
+RDIR = ["logs"]
+for DIR in RDIR:
+    if not os.path.isdir(__dirname+'/'+DIR):
+        os.mkdir(__dirname+'/'+DIR)
 
-if not os.path.isdir(__dirname+'/lists'):
-    os.mkdir(__dirname+'/lists')
+s_print_lock = threading.Lock()
+def s_print(*a, **b):
+    """Thread safe print function"""
+    with s_print_lock:
+        print(*a, **b)
 
-try:
+
+def GetProxy(ThreadNo,ProxyList,ProxyCount,MaxRequestFails,PingCheck):
+    fails = 0
     i = 0
-    while True:
-        if i <= 100:
-            try:
-                s = requests.get("https://public.freeproxyapi.com/api/Proxy/Mini")
-            except Exception as err:
-                print("Request => "+str(err)+" <=")
-                break
+
+    if str(platform.system() == "Linux"):
+        spaces = "\033[0H" + ("\n"*(ThreadNo+1))
+    else:
+        spaces = ""
+
+    while i < ProxyCount:
+        try:
+            s = requests.get("https://public.freeproxyapi.com/api/Proxy/Medium")
+
             if s.status_code == 200:
                 res = s.json()
-                MODE = 'a' if os.path.isfile(res['type']+"_"+res['proxyLevel']+'.txt') else 'w'
-
-                with open(__dirname+'/lists/'+str(res['type'])+"_"+str(res['proxyLevel'])+'.txt',MODE,encoding='utf-8') as output:
-                    output.write(str(res['host'])+":"+str(res['port'])+"\n")
-                os.system("echo "+str(res['host'])+":"+str(res['port'])+">> bigProxy.txt")
-                i = i +1
-                print("Got["+str(i)+"]: "+str(res['host'])+":"+str(res['port'])+(" "*70),end="\r")
-            else:
-                break
-        else:
-            FProxy = []
-            with open('bigProxy.txt','r',encoding='utf-8') as BigBoi:
-                proxys = BigBoi.readlines()
-
-            x = 0
-            for proxy in proxys:
                 
-                if FProxy.count(proxy) == 0:
-                    FProxy.append(proxy)
-                x = x + 1
+                if res['isAlive'] == True and res['proxyLevel'] in ["Anonymous","Elite"]: # just skip the proxy if it's considered 'dead', i dont value this as error.
+                    proxy = str(res['host'])+":"+str(res['port'])
+                    if ProxyList.count(proxy) == 0:
+                        if PingCheck:
+                            pass
 
-                LSYM = 70
-                PRC = (x / len(proxys)) * 100
-                SYM = round((PRC * LSYM) / 100, 0)
-
-                PROG = ("="* int( round(SYM -1,0) ))
-                EMPTPROG = (" "* int( round( (LSYM - (SYM-1)),0) ) )
-                print("Sorting "+str(round(PRC,2))+"% |"+PROG+">"+EMPTPROG+"| "+str(x)+" / "+str(len(proxys))+"        ",end="\r")
+                        ProxyList.append(proxy)
+                        i = i + 1
+                        s_print(spaces+Fore.GREEN+"Thread["+str(ThreadNo)+"] Got["+str(i)+"]: "+str(res['host'])+":"+str(res['port'])+(" "*10))
 
 
-            with open('bigProxy.txt','w',encoding='utf-8') as BigBoi:
-                BigBoi.writelines(FProxy)   
-            
-            FProxy = None
-            proxys = None
-            BigBoi = None
-            x = None
-            proxy = None
-            LSYM = None
-            PRC = None
-            SYM = None
-            PROG = None
-            EMPTPROG = None
+            elif fails >= MaxRequestFails:
+                i = ProxyCount
+                break
+            elif s.status_code != 200:
+                raise ConnectionError("s.status_code: "+str(s.status_code))
 
-            i = 0
+        except Exception as err:
+            fails = fails + 1
+            s_print(spaces+Fore.RED+"Thread["+str(ThreadNo)+"] Failed."+Fore.RESET)
+            LOGFILE = __dirname+"/logs/Thread["+str(ThreadNo)+"].log"
+            MODE = 'a' if os.path.isfile(LOGFILE) else 'w'
+            with open(LOGFILE,MODE,encoding='utf-8') as log:
+                log.write(str(err)+"\n")
 
-except KeyboardInterrupt:
-    quit()
-    sys.exit()
+    s_print(spaces+Fore.YELLOW+"Thread["+str(ThreadNo)+"] Finished Job."+(" "*20))
+
+def setup():
+    options = {'Threads':'int','Proxy Count':'int','Max Fails':int}
+    settings = []
+    
+
+    return settings #Threads, ProxyLoopCount, MaxFails, PingCheck
+
+
+if __name__ == '__main__':
+
+
+    Threads, ProxyLoopCount, MaxFails, PingCheck = setup()
+
+
+    ProxyListShared = []
+    TasksList = []
+    
+    for i in range(Threads):
+        CT = threading.Thread(target=GetProxy, args=(i,ProxyListShared,int(round(ProxyLoopCount / Threads,0)),MaxFails,PingCheck,),daemon=True )
+        TasksList.append(CT)
+        CT.start()
+
+    for Task in TasksList:
+        Task.join()
+
+
+    if str(platform.system() == "Linux"):
+        spaces = "\033[0H" + ("\n"*(Threads+1))
+    else:
+        spaces = ""
+
+    print(spaces+"Result: "+str(len(ProxyListShared))+"/"+str(ProxyLoopCount)+" Proxys saved.")
+    MODE = 'a' if os.path.isfile('SyncList.txt') else 'w'
+    with open('SyncList.txt',MODE,encoding='utf-8') as FinalSync:
+        for proxy in ProxyListShared:
+            FinalSync.write(proxy+"\n")
+
+    print("\n"+spaces+Fore.RESET)

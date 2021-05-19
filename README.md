@@ -1,12 +1,12 @@
 # PFPS
-## Pretty Fast Proxy Scraper (multiHit.py)
+## Pretty Fast Proxy Scraper (getProxy.py)
 - puts everything into 'SyncList.txt'
 - u can customize the resource usage (Thread count and Proxy count to get.)
 - gets 5k Proxys in the same time the old script gets ~ 270 Proxys.
 
 ##### Threads go brrrrr
 
-## Pretty Slow Proxy Scraper (getProxys.py)
+## Pretty Slow Proxy Scraper (getProxy_old.py)
 - Pretty Slow Python3 Proxy Scraper with following output:
  
 1. Files with type as name e.g. "Socks4_Elite.txt" => Socks4 Elite type proxy, ez right?
