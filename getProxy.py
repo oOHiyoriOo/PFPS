@@ -3,6 +3,8 @@ import threading
 import requests
 import os
 import platform
+import json
+import datetime
 
 from pydoc import locate
 from colorama import Fore,init
@@ -23,7 +25,8 @@ def s_print(*a, **b):
         print(*a, **b)
 
 
-def GetProxy(ThreadNo,ProxyList,ProxyCount,MaxRequestFails,PingCheck):
+def GetProxy(ThreadNo,ProxyList,ProxyListSplit,ProxyCount,MaxRequestFails,PingCheck):
+    """Main Function for scraping proxys from the free api."""
     fails = 0
     i = 0
 
@@ -43,13 +46,31 @@ def GetProxy(ThreadNo,ProxyList,ProxyCount,MaxRequestFails,PingCheck):
                 if res['isAlive'] == True and res['proxyLevel'] in ["Anonymous","Elite"]: # just skip the proxy if it's considered 'dead', i dont value this as error.
                     proxy = str(res['host'])+":"+str(res['port'])
                     if ProxyList.count(proxy) == 0:
-                        if PingCheck:
+
+                        if PingCheck: # Coming soon
                             pass
 
                         ProxyList.append(proxy)
                         i = i + 1
                         s_print(spaces+Fore.GREEN+"Thread["+str(ThreadNo)+"] Got["+str(i)+"]: "+str(res['host'])+":"+str(res['port'])+(" "*10))
 
+                        if ProxyListSplit['enabled'] == True: # Splitting and collecting more information.
+                            # Create Basic data sructure if needed.
+                            # [ True,Finnland: {'Socks4': { 'Elite':{ 'x.x.x.x:xxxx':'lan;lon' }, 'Anonymouse':{ 'x.x.x.x:xxxx':'lan;lon' } } } ]
+                            if not res['countryName'] in ProxyListSplit:
+                                ProxyListSplit[res['countryName']] = {}
+                            
+                            if not res['type'] in ProxyListSplit[res['countryName']]:
+                                ProxyListSplit[res['countryName']][res['type']] = {}
+
+                            if not res['proxyLevel'] in ProxyListSplit[res['countryName']][res['type']]:
+                                ProxyListSplit[res['countryName']][res['type']][res['proxyLevel']] = {}
+                            
+                            proxy = str(res['host'])+":"+str(res['port'])
+                            pos = str(res['latitude']) + ";" + str(res['longitude'])
+                            ProxyListSplit[res['countryName']][res['type']][res['proxyLevel']][proxy] = pos
+
+                    
 
             elif fails >= MaxRequestFails:
                 i = ProxyCount
@@ -69,35 +90,40 @@ def GetProxy(ThreadNo,ProxyList,ProxyCount,MaxRequestFails,PingCheck):
 
 
 def setup():
-    options = {'Threads':'int','Proxy Count':'int','Max Fails':'int','Ping Check':'bool'}
-    settings = []
+    options = {'Threads':'int','Proxy Count':'int','Max Fails':'int','Ping Check':'bool','Split Lists?':'bool','Export Advanced':'bool'}
+    settings = [1,10,2,False,False,False]
     
-    for e in options:
-        res = input(e+": ")
-        tmp = locate(options[e])
-        valid = False
-        while not valid:
-            try:
-                tmp(res)
-                settings.append(tmp(res))
-                valid = True
-            except:
-                valid = False
+    for i, e in enumerate(options):
+    #for e in options:
+        res = input(e+" ("+options[e]+") ["+str(settings[i])+"]: ")
+        if res.replace(" ","") != "":
+            tmp = locate(options[e])
+            valid = False
+            while not valid:
+                try:
+                    tmp(res)
+                    settings[i] = tmp(res)
+                    valid = True
+                except:
+                    valid = False
 
+    os.system('cls' if os.name == 'nt' else 'clear')
     return settings #Threads, ProxyLoopCount, MaxFails, PingCheck
 
 
 if __name__ == '__main__':
 
     try:
-        Threads, ProxyLoopCount, MaxFails, PingCheck = setup()
+        Threads, ProxyLoopCount, MaxFails, PingCheck, SplitLists, AdvancedOutput = setup()
 
+        ProxyListShared = [] # all Proxys
+        ProxyListSplit = {} # Proxy List with there type.
+        TasksList = [] # List with all Threads, to 'Sync' them later 
 
-        ProxyListShared = []
-        TasksList = []
-        
+        ProxyListSplit['enabled'] = (True if SplitLists else True if AdvancedOutput else False)
+
         for i in range(Threads):
-            CT = threading.Thread(target=GetProxy, args=(i,ProxyListShared,int(round(ProxyLoopCount / Threads,0)),MaxFails,PingCheck,),daemon=True )
+            CT = threading.Thread(target=GetProxy, args=(i,ProxyListShared,ProxyListSplit,int(round(ProxyLoopCount / Threads,0)),MaxFails,PingCheck,),daemon=True )
             TasksList.append(CT)
             CT.start()
 
@@ -105,25 +131,35 @@ if __name__ == '__main__':
             Task.join()
 
 
-        if str(platform.system() == "Linux"):
-            spaces = "\033[0H" + ("\n"*(Threads+1))
+        if str(platform.system() == "Linux"): # Cursor position only works on linux as expected. (sometimes works on windows sometimes not.)
+            spaces = "\033[0H" + ("\n"*(Threads+1)) # line reset with spacing.
         else:
             spaces = ""
 
-        print(spaces+"Result: "+str(len(ProxyListShared))+"/"+str(ProxyLoopCount)+" Proxys saved.")
+        print(spaces+"Result: "+str(len(ProxyListShared))+"/"+str(ProxyLoopCount)+" Proxys, saving...")
         MODE = 'a' if os.path.isfile('SyncList.txt') else 'w'
         with open('SyncList.txt',MODE,encoding='utf-8') as FinalSync:
             for proxy in ProxyListShared:
                 FinalSync.write(proxy+"\n")
 
+        if AdvancedOutput:
+            print(spaces+"Dumping advanced output...")
+            
+            date_time = datetime.datetime.now()
+            Filename = str(date_time.strftime("%Y-%m-%d %H:%M:%S"))
+
+            with open(Filename+".json",'w',encoding='utf-8') as AOut:
+                AOut.write(json.dumps(ProxyListSplit))
+
+
         print("\n"+spaces+Fore.RESET)
 
     except KeyboardInterrupt:
-        exit()
+        exit() # it happend for me, exit alone dont work so ill quit if it's not working
         quit()
         
     except Exception as err:
-        LOGFILE = __dirname+"/logs/Main.log"
+        LOGFILE = __dirname+"/logs/Main.log" # main error
         MODE = 'a' if os.path.isfile(LOGFILE) else 'w'
         with open(LOGFILE,MODE,encoding='utf-8') as log:
             log.write(str(err)+"\n")
