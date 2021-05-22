@@ -25,12 +25,12 @@ def s_print(*a, **b):
         print(*a, **b)
 
 
-def GetProxy(ThreadNo,ProxyList,ProxyListSplit,ProxyCount,MaxRequestFails,PingCheck):
+def GetProxy(ThreadNo,ProxyList,ProxyListSplit,ProxyCount,MaxRequestFails,PingCheck,ForceLinuxOutput):
     """Main Function for scraping proxys from the free api."""
     fails = 0
     i = 0
 
-    if str(platform.system() == "Linux"):
+    if str(platform.system() == "Linux") or ForceLinuxOutput:
         spaces = "\033[0H" + ("\n"*(ThreadNo+1))
     else:
         spaces = ""
@@ -90,8 +90,8 @@ def GetProxy(ThreadNo,ProxyList,ProxyListSplit,ProxyCount,MaxRequestFails,PingCh
 
 
 def setup():
-    options = {'Threads':'int','Proxy Count':'int','Max Fails':'int','Ping Check':'bool','Split Lists?':'bool','Export Advanced':'bool'}
-    settings = [1,10,2,False,False,False]
+    options = {'Threads':'int','Proxy Count':'int','Max Fails':'int','Ping Check':'bool','Split Lists?':'bool','Export Advanced':'bool','Force Linux Output':'bool'}
+    settings = [1,10,2,False,False,False,False]
     
     for i, e in enumerate(options):
     #for e in options:
@@ -114,7 +114,7 @@ def setup():
 if __name__ == '__main__':
 
     try:
-        Threads, ProxyLoopCount, MaxFails, PingCheck, SplitLists, AdvancedOutput = setup()
+        Threads, ProxyLoopCount, MaxFails, PingCheck, SplitLists, AdvancedOutput, ForceLinuxOutput = setup()
 
         ProxyListShared = [] # all Proxys
         ProxyListSplit = {} # Proxy List with there type.
@@ -123,7 +123,7 @@ if __name__ == '__main__':
         ProxyListSplit['enabled'] = (True if SplitLists else True if AdvancedOutput else False)
 
         for i in range(Threads):
-            CT = threading.Thread(target=GetProxy, args=(i,ProxyListShared,ProxyListSplit,int(round(ProxyLoopCount / Threads,0)),MaxFails,PingCheck,),daemon=True )
+            CT = threading.Thread(target=GetProxy, args=(i,ProxyListShared,ProxyListSplit,int(round(ProxyLoopCount / Threads,0)),MaxFails,PingCheck,ForceLinuxOutput,),daemon=True )
             TasksList.append(CT)
             CT.start()
 
@@ -131,7 +131,7 @@ if __name__ == '__main__':
             Task.join()
 
 
-        if str(platform.system() == "Linux"): # Cursor position only works on linux as expected. (sometimes works on windows sometimes not.)
+        if str(platform.system() == "Linux") or ForceLinuxOutput: # Cursor position only works on linux as expected. (sometimes works on windows sometimes not.)
             spaces = "\033[0H" + ("\n"*(Threads+1)) # line reset with spacing.
         else:
             spaces = ""
@@ -139,7 +139,7 @@ if __name__ == '__main__':
         print(spaces+"Result: "+str(len(ProxyListShared))+"/"+str(ProxyLoopCount)+" Proxys, saving...")
         
         # Percentage of fullfilling the requested Proxys
-        PRC = (len(ProxyListShared) / len(ProxyLoopCount)) * 100 # what we got / what we wanted * 100
+        PRC = (len(ProxyListShared) / ProxyLoopCount) * 100 # what we got / what we wanted * 100
         print(str(round(PRC,2))+"% Sucess rate.") # round to 2 digits.
         print("") # just get some space :P
 
@@ -152,7 +152,8 @@ if __name__ == '__main__':
             print(spaces+"Dumping advanced output...")
             
             date_time = datetime.datetime.now()
-            Filename = str(date_time.strftime("%Y-%m-%d %H:%M:%S"))
+            Filename = str(date_time.strftime("%Y-%m-%d %H_%M_%S"))
+            Filename = Filename.replace(" ","_")
 
             with open(Filename+".json",'w',encoding='utf-8') as AOut:
                 AOut.write(json.dumps(ProxyListSplit))
