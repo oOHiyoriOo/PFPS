@@ -137,7 +137,13 @@ if __name__ == '__main__':
             spaces = ""
 
         print(spaces+"Result: "+str(len(ProxyListShared))+"/"+str(ProxyLoopCount)+" Proxys, saving...")
-        MODE = 'a' if os.path.isfile('SyncList.txt') else 'w'
+        
+        # Percentage of fullfilling the requested Proxys
+        PRC = (len(ProxyListShared) / len(ProxyLoopCount)) * 100 # what we got / what we wanted * 100
+        print(str(round(PRC,2))+"% Sucess rate.") # round to 2 digits.
+        print("") # just get some space :P
+
+        MODE = 'a' if os.path.isfile('SyncList.txt') else 'w' # we just append if the file exist, to now override existing proxys.
         with open('SyncList.txt',MODE,encoding='utf-8') as FinalSync:
             for proxy in ProxyListShared:
                 FinalSync.write(proxy+"\n")
