@@ -24,8 +24,18 @@ def s_print(*a, **b):
     with s_print_lock:
         print(*a, **b)
 
+def PingCheckFunc(Enabled,host):
+    if not Enabled: # Shortcut if the check is disabled.
+        return True
+    else:
+        silence = " >/dev/null 2>&1" if str(platform.system() == 'Linux') else " >nul 2>&1"
+        response = os.system("ping "+("-c" if str(platform.system() == "Linux") else "-n ")+"1 " + host+silence)
+        if response == 0:
+            return True
+        else:
+            return False
 
-def GetProxy(ThreadNo,ProxyList,ProxyListSplit,ProxyCount,MaxRequestFails,PingCheck,ForceLinuxOutput):
+def GetProxy(ThreadNo,ProxyList,ProxyListSplit,ProxyCount,MaxRequestFails,PingCheck,ForceLinuxOutput,ExportGeoJson,GeoJson):
     """Main Function for scraping proxys from the free api."""
     fails = 0
     i = 0
@@ -39,16 +49,14 @@ def GetProxy(ThreadNo,ProxyList,ProxyListSplit,ProxyCount,MaxRequestFails,PingCh
         try:
             s = requests.get("https://public.freeproxyapi.com/api/Proxy/Medium")
 
-            if s.status_code == 200:
+            if s.status_code == 200 and fails < MaxFails:
                 res = s.json()
                 
                 # ["Anonymous","Elite"] are the only proxy types usefull, the others are snitches.
                 if res['isAlive'] == True and res['proxyLevel'] in ["Anonymous","Elite"]: # just skip the proxy if it's considered 'dead', i dont value this as error.
                     proxy = str(res['host'])+":"+str(res['port'])
-                    if ProxyList.count(proxy) == 0:
 
-                        if PingCheck: # Coming soon
-                            pass
+                    if ProxyList.count(proxy) == 0 and PingCheckFunc(PingCheck,res['host']):
 
                         ProxyList.append(proxy)
                         i = i + 1
@@ -70,7 +78,20 @@ def GetProxy(ThreadNo,ProxyList,ProxyListSplit,ProxyCount,MaxRequestFails,PingCh
                             pos = str(res['latitude']) + ";" + str(res['longitude'])
                             ProxyListSplit[res['countryName']][res['type']][res['proxyLevel']][proxy] = pos
 
-                    
+                        if ExportGeoJson:
+                            CProxy = {} # current Proxy
+                            CProxy['type'] = 'Feature'
+                            CProxy['properties'] = {}
+                            CProxy['properties']['name'] = res['host']
+                            CProxy['properties']['address'] = res['countryName']
+                            CProxy['properties']['marker-color'] = '#FF0000'
+                            CProxy['geometry'] = {}
+                            CProxy['geometry']['type'] = 'Point'
+                            CProxy['geometry']['coordinates'] = []
+                            (CProxy['geometry']['coordinates']).append(res['longitude'])
+                            (CProxy['geometry']['coordinates']).append(res['latitude'])
+
+                        (GeoJson['features']).append(CProxy)
 
             elif fails >= MaxRequestFails:
                 i = ProxyCount
@@ -90,9 +111,9 @@ def GetProxy(ThreadNo,ProxyList,ProxyListSplit,ProxyCount,MaxRequestFails,PingCh
 
 
 def setup():
-    options = {'Threads':'int','Proxy Count':'int','Max Fails':'int','Ping Check':'bool','Split Lists?':'bool','Export Advanced':'bool','Force Linux Output':'bool'}
-    settings = [1,10,2,False,False,False,False]
-    
+    options = {'Threads':'int','Proxy Count':'int','Max Fails':'int','Ping Check':'bool','Split Lists?':'bool','Export Advanced':'bool','Force Linux Output':'bool','Export Geo.Json':'bool'}
+    settings = [1,10,2,False,False,False,False,True]
+    print("Just use 'enter' to use default Value shown in the []")
     for i, e in enumerate(options):
     #for e in options:
         res = input(e+" ("+options[e]+") ["+str(settings[i])+"]: ")
@@ -114,16 +135,22 @@ def setup():
 if __name__ == '__main__':
 
     try:
-        Threads, ProxyLoopCount, MaxFails, PingCheck, SplitLists, AdvancedOutput, ForceLinuxOutput = setup()
+        Threads, ProxyLoopCount, MaxFails, PingCheck, SplitLists, AdvancedOutput, ForceLinuxOutput, ExportGeoJson = setup()
 
         ProxyListShared = [] # all Proxys
         ProxyListSplit = {} # Proxy List with there type.
         TasksList = [] # List with all Threads, to 'Sync' them later 
+        
+        GeoJson = {} if ExportGeoJson else None
+        if ExportGeoJson: # build the frame for the geoJson
+            GeoJson['type'] = 'FeatureCollection'
+            GeoJson['features'] = []
+
 
         ProxyListSplit['enabled'] = (True if SplitLists else True if AdvancedOutput else False)
 
         for i in range(Threads):
-            CT = threading.Thread(target=GetProxy, args=(i,ProxyListShared,ProxyListSplit,int(round(ProxyLoopCount / Threads,0)),MaxFails,PingCheck,ForceLinuxOutput,),daemon=True )
+            CT = threading.Thread(target=GetProxy, args=(i,ProxyListShared,ProxyListSplit,int(round(ProxyLoopCount / Threads,0)),MaxFails,PingCheck,ForceLinuxOutput,ExportGeoJson,GeoJson,),daemon=True )
             TasksList.append(CT)
             CT.start()
 
@@ -143,21 +170,33 @@ if __name__ == '__main__':
         print(str(round(PRC,2))+"% Sucess rate.") # round to 2 digits.
         print("") # just get some space :P
 
-        MODE = 'a' if os.path.isfile('SyncList.txt') else 'w' # we just append if the file exist, to now override existing proxys.
-        with open('SyncList.txt',MODE,encoding='utf-8') as FinalSync:
+        MODE = 'a' if os.path.isfile('AllProxys.txt') else 'w' # we just append if the file exist, to now override existing proxys.
+        with open('AllProxys.txt',MODE,encoding='utf-8') as FinalSync:
             for proxy in ProxyListShared:
                 FinalSync.write(proxy+"\n")
 
         if AdvancedOutput:
+            if not os.path.isdir('advancedExport'):
+                os.mkdir('advancedExport')
             print(spaces+"Dumping advanced output...")
             
             date_time = datetime.datetime.now()
             Filename = str(date_time.strftime("%Y-%m-%d %H_%M_%S"))
             Filename = Filename.replace(" ","_")
 
-            with open(Filename+".json",'w',encoding='utf-8') as AOut:
+            with open(__dirname+'/advancedExport/'+Filename+".json",'w',encoding='utf-8') as AOut:
                 AOut.write(json.dumps(ProxyListSplit))
 
+        if ExportGeoJson:
+            if not os.path.isdir('geoExport'):
+                os.mkdir('geoExport')
+
+            date_time = datetime.datetime.now()
+            Filename = str(date_time.strftime("%Y-%m-%d %H_%M_%S"))
+            Filename = Filename.replace(" ","_")
+
+            with open(__dirname+'/geoExport/'+Filename+".json",'w',encoding='utf-8') as AOut:
+                AOut.write(json.dumps(GeoJson))
 
         print("\n"+spaces+Fore.RESET)
 
